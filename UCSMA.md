@@ -1,0 +1,27 @@
+# U-CSMA Protocol
+The 802.11 wireless network uses CSMA protocol for medium access control, it is distributed, simple and easy to implement. However, traditional CSMA protocol has its shortcomings in terms of fairness among wireless nodes and node-to-node latency. U-CSMA (Unlocking CSMA) is an enhanced CSMA protocol that devotes to eliminate these shortcomings, the design and theoretical analysis of U-CSMA have been discussed in this [paper](https://arxiv.org/pdf/1009.5944.pdf).
+## Basic Idea of U-CSMA
+One big problem of regular CSMA is the threshold behavior: when every node in the network wants to transmit constantly, after some time the network converges to a state that half of the nodes in the network transmit constantly, while the other half have no chance to transmit at all. In another word, the network gets locked into a certain state after some time. Once the network is locked into a certain state, it takes a long time before the other half nodes re-gain access to the channel, causing unfairness and large delay. In a counter strategy to this threshold behavior, the idea of U-CSMA is to reset the network (i.e. force all nodes in the network abort transmission simultaneouly and let them compete for channel access again) periodically, thus unlocking the network from the locked-in state.
+## Implementation and Real-World Experiments of U-CSMA
+Although the design and theoretical analysis of U-CSMA has existed for a while, there lacks a prototype implementation and real-world experiments. My research is focused on creating a real-world implementation of U-CSMA and conduct experiments on a classic wireless topology to verify the unlocking behavior of U-CSMA.
+
+To ease the implementation of U-CSMA, I chose ath9k based wireless chips as the they have a relatively open linux drive and are easy to tamper with. In particular, I chose AR9331 development board as it has an onboard integrated ath9k wireless chip, making the communication between the CPU and wireless chip very fast (unlike other USB ath9k wireless cards, whose communication latency is subject to the USB bus and can be as high as 250 milliseconds).
+
+To conduct the real world experiments, the following steps are required:
+1. __Creating the desired topology.__ The classic topology I use for the experiments involves three nodes, one mid node and two edge nodes. The mid node is subject to interference from both edge nodes (i.e. it cannot transmit when either edge node is transmitting), while the two edge nodes are free of interference from each other (i.e. they can transmit simlutaneously). Under this topogoly, with tradational CSMA protocol, the network quickly converges to the state that both edge nodes are transmitting constantly while the mid node gets little chance to transmit. The detailed steps of creating this topology is [here](https://gist.github.com/JackWindows/1bb9073d277f301bdec711e1f91c4525).
+2. __Creating the situation that each node wants to transmit constantly.__ In my experiments it requires that all nodes want to transmit as fast as possible (i.e. they are constantly competing for channel access). To create such a situation, wireless packet injection is used, the details are available [here](https://gist.github.com/JackWindows/684f7c751e9677b6f584afe4caf1fff1). The most important idea here is to set the NO_ACK flag for all injected packets, in this way the wireless adapter will skip the part of waiting ACK.
+3. __Verifying the desired topology.__ A bunch of experiments are conducted to verify the behavior matches the expectation. The records are available [here](https://gist.github.com/JackWindows/708984463097954ed9e80b90bc1e89a7).
+4. __Implementing the actual unlocking mechanism.__ This involves tampering the ath9k driver as well as creating a LKM (loadable kernel module) to perform the unlocking. The detailed explanation of how the unlocking is done in ath9k based wireless adapters is available [here](https://gist.github.com/JackWindows/8ab85dd00bcef08242d818fce440d94f). There is also a study of the [TX intercepting behavior](https://gist.github.com/JackWindows/9739de647151080b7d3997147ef56f7a), which is used to reset the whole network during unlocking process.
+
+There is also a study of the traditional CSMA behavior of AR9331 development boards available [here](https://gist.github.com/JackWindows/c7921b76ebc6f3f960b3a2a867435637), which helps me creating the simulation program to get expected behavior of the real-world experiments.
+# A List of Related Documents
+Here is a list of related documents I created for this research project:
+1. [Wireless Packet Injection](https://gist.github.com/JackWindows/684f7c751e9677b6f584afe4caf1fff1)
+2. [Unlocking Kernel Module](https://gist.github.com/JackWindows/8ab85dd00bcef08242d818fce440d94f)
+3. [Desired Experimental Topology](https://gist.github.com/JackWindows/1bb9073d277f301bdec711e1f91c4525)
+4. [Verification Experiments of Desired Topology](https://gist.github.com/JackWindows/708984463097954ed9e80b90bc1e89a7)
+5. [AR9331 CSMA Behavior Analysis](https://gist.github.com/JackWindows/c7921b76ebc6f3f960b3a2a867435637)
+6. [TX Path Analysis](https://gist.github.com/JackWindows/20853a91fdf6cc6f7a2c4f24463a9daa)
+7. [TX Intercepting Behavior](https://gist.github.com/JackWindows/9739de647151080b7d3997147ef56f7a)
+8. [TX Timeline Monitoring](https://gist.github.com/JackWindows/af4c002cf4778f1f99eb56e60a9df38d)
+9. [Set Parameters for Wireless Adapter](https://gist.github.com/JackWindows/6453d00571e61b5c086221b37a67c860)

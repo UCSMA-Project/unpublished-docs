@@ -1,0 +1,29 @@
+# TX timeline for UCSMA
+During my research, one important thing to investigate in is the TX timeline of all three nodes (i.e. the time point when each node starts or stops transmission), as this can give insights about whether the 3 nodes are following the predicted behavior. This document gives an introduction on how to get the TX timeline using a stand alone monitoring node.
+
+## TX Monitoring Architecture
+![alt-text](https://docs.google.com/drawings/d/e/2PACX-1vRoBdSNxgzszZyuRzfv_gLwNtEk0rhrrvfVA9G3j0qwLgEOLlPWrCmBo1Oj9yptUd64Xul9DKna8Lz_/pub?w=1438&h=603 "TX monitoring architecture")  
+In my setup, I use a raspberry pi as the monitoring node, the rational here is to get a device with GPIO board as well as resourceful documentations. On my AR9331 development boards, I modified the ath9k driver to let them send an GPIO pulse once TX\_OK interrupt is received, the specific commit is available here: [patch1](https://github.com/JackWindows/OpenWRT-14.07-JS9331/commit/25da7b946d58d9d0da6f72209e180b8e758e7ac3), [patch2](https://github.com/JackWindows/OpenWRT-14.07-JS9331/commit/de08eb025a5c7eb95e3fd8593deba51c04a45b78). In this way, the monitoring node can sense an GPIO pulse whenever a node finishes a transmission. With this information, in combination with the transmitting duration of a frame, I can reconstruct the TX timeline of all three nodes.
+
+Note: It is impossible to get an accurate measuring of when the wireless adapter starts the transmission. The only thing visible to the driver is the time point when the frame is pushed into the wireless adapter. Due to other procedures happening on the wireless adapter (e.g. post-frame backoff, or channel is occupied), the excat time point of when the transmission starts is transparent to the driver.
+## TX Monitoring Kernel Module
+In order to obtain timely and accurate TX timelines, the program that catches GPIO pulses is best to operate within the kernel space. Therefore, I worte a [Raspi kernel module](https://github.com/JackWindows/ucsma-raspi-gpio) to accompanlish this task. Once loaded, user can use  
+`echo [frame count] > /sys/module/gpio_timeline/parameters/max_log_count` to tell the kernel module to start catching GPIO pulses, and it will output the captured timeline information into the kernel ring buffer after frame count reaches the pre-set value. User can then use `dmesg` command to read the kernel ring buffer and see the timeline information.
+
+_Note: To compile the raspberry pi kernel module, `rpi-source` is required, for more details please see wiki of the [rpi-source project](https://github.com/notro/rpi-source/wiki)._
+## Visualize TX Timeline Information
+The TX timeline data outputted to the kernel ring buffer is massive and not very easy to read. To solve this problem, I wrote a python script using `matplotlib` to generate a visualized diagram of the timeline data. It is available [here](https://github.com/JackWindows/TX_timeline_plotter). Please follow the following steps to use this tool:
+### 1. Get TX Timeline Data
+By default, the TX timeline data in the kernel ring buffer is human-readable, however, there is only limited space in the kernel ring buffer, and the human-readable format has too much overhead, which is limiting the number of frames in the outputted data. To use the visualizer, timeline data has to be fully outputted into the kernel ring buffer (if there is too much data, the previous data will be circular eased once the kernel ring buffer is full). Therefore, when loading the TX monitoring kernel module, use in conjunction with parameter `human_readable_output=0`:  
+`insmod gpio_timeline.ko human_readable_output=0`  
+If you have already loaded the kernel module, you can change the `human_readable_output` parameter by executing  
+`echo 0 > /sys/module/gpio_timeline/parameters/human_readable_output`  
+Then perform `dmesg -c` to clear the current kernel ring buffer. After that, enabling cataching GPIO pulses by executing (the following example shows command to caputre 3000 frames' timeline data):  
+`echo 3000 > /sys/module/gpio_timeline/parameters/max_log_count`  
+Assuming you have the AR9331 devices in trasmitting state, it should take a few seconds for the kernel module to caputre timeline data. Then you can save the timeline data in the kernel ring buffer by executing `dmesg -c > /tmp/data`, which will clear the kernel ring buffer and save whatever is in it to file `/tmp/data`. This file needs to be transferred later to generate the visualized timeline graph.
+### 2. Generate TX Timeline Graph
+Once the TX timeline data is acquired, you can use the script `draw.py` to generate the visualized graph, juse use `python draw.py` to execuate the script, and a PDF file `TX_timeline.pdf` should be generated under the current directory, which contains the visualized graph. Note that the generated PDF file is usually huge and requires to zoom in a lot to see the timeline graph clearly. And most PDF readers will have trouble rendering such a gigantic vector graphics, I suggest to use Chrome browser to open the PDF file for seamless experience.
+
+Note by default the script will focus on the mid node's transmission, i.e. it will omit the part when mid node is not transmitting. You can pass a parameter to the `draw.py` script to change the focus to left or right node.
+
+Note that the TX start time for each node is inferred by the TX finish time and frame duration. Therefore it is important to set the correct frame duration in the script, otherwise the generated TX timeline graph won't have much meaning. Currently I am using 1000 bytes frames and the frame duration is 920us, you should change the config in the script depending on what length of frame you use.
